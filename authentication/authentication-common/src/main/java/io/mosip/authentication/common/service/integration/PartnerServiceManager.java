@@ -211,34 +211,8 @@ public class PartnerServiceManager {
 											   Optional<MispLicenseData> mispLicOptional, String headerCertificateThumbprint, 
 											   boolean certValidationNeeded, Optional<OIDCClientData> oidcClientData) throws IdAuthenticationBusinessException {
 
-		logger.info(IdAuthCommonConstants.IDA, this.getClass().getSimpleName(),
-				"validatePartnerMappingDetails",
-				"START - PartnerMapping Optional Present: " + partnerMappingDataOptional.isPresent());
-
 		if (partnerMappingDataOptional.isPresent() && !partnerMappingDataOptional.get().isDeleted()) {
 			PartnerMapping partnerMapping = partnerMappingDataOptional.get();
-			Optional<PartnerData> partnerDataOptional = partnerDataRepo.findByPartnerIdFromDB(partnerMapping.getPartnerData().getPartnerId());
-
-			logger.info(IdAuthCommonConstants.IDA, this.getClass().getSimpleName(),
-					"partner_mapping_details",
-					"PartnerId: " + partnerMapping.getPartnerId() +
-							" | PartnerType: " + partnerMapping.getPartnerData().getPartnerName() +
-							" | PartnerStatus: " + partnerMapping.getPartnerData().getPartnerStatus() +
-							" | Deleted: " + partnerMapping.getPartnerData().isDeleted());
-
-			if(partnerDataOptional.isPresent() && !partnerMappingDataOptional.get().isDeleted()){
-				PartnerData partnerData = partnerDataOptional.get();
-				if (partnerDataOptional.isPresent()) {
-					logger.info(IdAuthCommonConstants.IDA, this.getClass().getSimpleName(),
-					        "partner_data_validation", "Partner Id: " + partnerData.getPartnerId() + " | Partner Status in DB: " + partnerData.getPartnerStatus());
-				    logger.info(IdAuthCommonConstants.IDA, this.getClass().getSimpleName(),
-					        "partner_mapping_data_validation", "partner mapping data value in DB: " + partnerMapping.getPartnerData().getPartnerStatus());
-				    if (!"ACTIVE".equalsIgnoreCase(partnerData.getPartnerStatus())) {
-				    	throw new IdAuthenticationBusinessException(IdAuthenticationErrorConstants.PARTNER_DEACTIVATED.getErrorCode(),
-								IdAuthenticationErrorConstants.PARTNER_DEACTIVATED.getErrorMessage());
-				    }
-				}
-			}
 			logger.info(IdAuthCommonConstants.IDA, this.getClass().getSimpleName(),
 			        "partner_mapping_data_validation", "partner mapping data value in DB: " + partnerMapping.getPartnerData().getPartnerStatus());
 			if (partnerMapping.getPartnerData().isDeleted()) {
