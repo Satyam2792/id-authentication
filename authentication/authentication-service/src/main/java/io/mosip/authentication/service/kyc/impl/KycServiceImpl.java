@@ -147,31 +147,40 @@ public class KycServiceImpl implements KycService {
 		EKycResponseDTO kycResponseDTO = new EKycResponseDTO();
 		if (Objects.nonNull(identityInfo) && Objects.nonNull(allowedkycAttributes) && !allowedkycAttributes.isEmpty()) {
 			Optional<String> faceAttribute = IdInfoHelper.getKycAttributeHasPhoto(allowedkycAttributes);
-			if(faceAttribute.isPresent()) {
-				Map<String, String> faceEntityInfoMap = idInfoHelper.getIdEntityInfoMap(BioMatchType.FACE, identityInfo,
-						null);
-				String faceCbeff = Objects.nonNull(faceEntityInfoMap)
-						? faceEntityInfoMap.get(CbeffDocType.FACE.getType().value())
-						: null;
-				
-				String face;
-				if(sendFaceAsCbeffXml) {
-					face = faceCbeff;
-				} else {
+			if (faceAttribute.isPresent()) {
+				// --- Raw Face Image ---
+				mosipLogger.info("Identity Info Keys: {}", identityInfo.keySet());
+				if (identityInfo.containsKey(BioMatchType.FACE_RAW_IMAGE.getIdMapping().getIdname())) {
 					try {
-						face = getFaceBDB(faceCbeff);
+						Map<String, String> faceRawImageEntityInfoMap = idInfoHelper
+								.getIdEntityInfoMap(BioMatchType.FACE_RAW_IMAGE, identityInfo, null);
+						mosipLogger.info("faceRawImageEntityInfoMap Keys: {}", faceRawImageEntityInfoMap.keySet());
+						if (faceRawImageEntityInfoMap != null && !faceRawImageEntityInfoMap.isEmpty()) {
+							String faceRawCbeff = faceRawImageEntityInfoMap.get(CbeffDocType.FACE_RAW_IMAGE.getType().value());
+							if (faceRawCbeff == null || faceRawCbeff.isEmpty()) {
+								mosipLogger.info("No face raw images found for the specified type.");
+							}
+							String faceRaw;
+							if (sendFaceAsCbeffXml) {
+								faceRaw = faceRawCbeff;
+							} else {
+								faceRaw = getFaceBDB(faceRawCbeff, CbeffDocType.FACE_RAW_IMAGE.getName());
+							}
+
+							if (faceRaw != null) {
+								List<IdentityInfoDTO> bioValue = new ArrayList<>();
+								IdentityInfoDTO identityInfoDTO = new IdentityInfoDTO();
+								identityInfoDTO.setValue(faceRaw);
+								bioValue.add(identityInfoDTO);
+								identityInfo.put(faceAttribute.get(), bioValue);
+							}
+						}
 					} catch (Exception e) {
-						throw new IdAuthenticationBusinessException(IdAuthenticationErrorConstants.BIOMETRIC_MISSING.getErrorCode(),
-								String.format(IdAuthenticationErrorConstants.BIOMETRIC_MISSING.getErrorMessage(), CbeffDocType.FACE.getName()), e);
+						mosipLogger.error(IdAuthCommonConstants.SESSION_ID, this.getClass().getSimpleName(), "",
+								"Error retrieving raw face image for KYC. " + e.getMessage(), e);
 					}
 				}
-					List<IdentityInfoDTO> bioValue = new ArrayList<>();
-					IdentityInfoDTO identityInfoDTO = new IdentityInfoDTO();
-					identityInfoDTO.setValue(face);
-					bioValue.add(identityInfoDTO);
-					identityInfo.put(faceAttribute.get(), bioValue);
 			}
-
 			Map<String, List<IdentityInfoDTO>> filteredIdentityInfo = filterIdentityInfo(allowedkycAttributes,
 					identityInfo, langCodes);
 			if (Objects.nonNull(filteredIdentityInfo)) {
@@ -179,6 +188,7 @@ public class KycServiceImpl implements KycService {
 			}
 		}
 		return kycResponseDTO;
+
 	}
 
 	/**
@@ -498,6 +508,34 @@ public class KycServiceImpl implements KycService {
 				throws IdAuthenticationBusinessException {
 		
 		if (consentedAttribute.equals(consentedFaceAttributeName)) {
+			
+			if(!idInfo.keySet().contains(BioMatchType.FACE_RAW_IMAGE.getIdMapping().getIdname())) {
+				mosipLogger.info(IdAuthCommonConstants.SESSION_ID, this.getClass().getSimpleName(), "addEntityForLangCodes",
+						"Face Raw image Bio not found in DB. So not adding to response claims.");
+			} else {
+				Map<String, String> faceRawImageEntityInfoMap = idInfoHelper.getIdEntityInfoMap(BioMatchType.FACE_RAW_IMAGE, idInfo,
+						null);
+				mosipLogger.info(IdAuthCommonConstants.SESSION_ID,
+				        this.getClass().getSimpleName(),
+				        "addEntityForLangCodes",
+				        "faceEntityInfoMap: " + faceRawImageEntityInfoMap);
+
+				if (faceRawImageEntityInfoMap != null && !faceRawImageEntityInfoMap.isEmpty()) {
+					try {
+						String face = convertJP2ToJpeg(getFaceBDB(faceRawImageEntityInfoMap.get(CbeffDocType.FACE_RAW_IMAGE.getType().value()), CbeffDocType.FACE_RAW_IMAGE.getName()));
+			            if (face != null) {
+							respMap.put(IdAuthCommonConstants.FACE_RAW_IMAGE, consentedPictureAttributePrefix + face);
+						}
+
+					} catch (Exception e) {
+						// Not throwing any exception because others claims will be returned without
+						// photo.
+						mosipLogger.error(IdAuthCommonConstants.SESSION_ID, this.getClass().getSimpleName(), "",
+								"Error Adding photo to the claims. " + e.getMessage(), e);
+					}
+				}
+			}
+			
 			if (!idInfo.keySet().contains(BioMatchType.FACE.getIdMapping().getIdname())) {
 				mosipLogger.info(IdAuthCommonConstants.SESSION_ID, this.getClass().getSimpleName(), "addEntityForLangCodes",
 					"Face Bio not found in DB. So not adding to response claims.");
@@ -514,11 +552,12 @@ public class KycServiceImpl implements KycService {
 					if (Objects.nonNull(face))
 						respMap.put(consentedAttribute, consentedPictureAttributePrefix + face);
 				} catch (Exception e) {
-					// Not throwing any exception because others claims will be returned without photo.
+					// Not throwing any exception because others claims will be returned without
+					// photo.
 					mosipLogger.error(IdAuthCommonConstants.SESSION_ID, this.getClass().getSimpleName(), "",
 							"Error Adding photo to the claims. " + e.getMessage(), e);
 				}
-				
+
 			}
 			return;
 		}
@@ -797,4 +836,14 @@ public class KycServiceImpl implements KycService {
 		return CryptoUtil.encodeBase64(birDataFromXMLType.get(0).getBdb());
 	}
 	
+	private String getFaceBDB(String faceCbeff, String cbeffDocTypeName) throws Exception {
+	    List<BIR> birDataFromXMLType = cbeffUtil.getBIRDataFromXMLType(
+	            faceCbeff.getBytes(), cbeffDocTypeName);
+	    mosipLogger.info(IdAuthCommonConstants.SESSION_ID, this.getClass().getSimpleName(),
+	            "getFaceBDB", "birDataFromXMLType size: " + birDataFromXMLType.size());
+	    if (birDataFromXMLType.isEmpty()) {
+	        throw new IdAuthenticationBusinessException(IdAuthenticationErrorConstants.UNABLE_TO_PROCESS);
+	    }
+	    return CryptoUtil.encodeBase64(birDataFromXMLType.get(0).getBdb());
+	}
 }

@@ -210,11 +210,8 @@ public class PartnerServiceManager {
 	private void validatePartnerMappingDetails(Optional<PartnerMapping> partnerMappingDataOptional,
 											   Optional<MispLicenseData> mispLicOptional, String headerCertificateThumbprint, 
 											   boolean certValidationNeeded, Optional<OIDCClientData> oidcClientData) throws IdAuthenticationBusinessException {
-
 		if (partnerMappingDataOptional.isPresent() && !partnerMappingDataOptional.get().isDeleted()) {
 			PartnerMapping partnerMapping = partnerMappingDataOptional.get();
-			logger.info(IdAuthCommonConstants.IDA, this.getClass().getSimpleName(),
-			        "partner_mapping_data_validation", "partner mapping data value in DB: " + partnerMapping.getPartnerData().getPartnerStatus());
 			if (partnerMapping.getPartnerData().isDeleted()) {
 				throw new IdAuthenticationBusinessException(IdAuthenticationErrorConstants.PARTNER_NOT_REGISTERED.getErrorCode(),
 						IdAuthenticationErrorConstants.PARTNER_NOT_REGISTERED.getErrorMessage());
